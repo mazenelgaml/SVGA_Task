@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/svga.lite@latest/build/svga.lite.min.js"></script>
+    <title>SVGA Player</title>
+</head>
+<body style="display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0;">
+<canvas id="svgaCanvas" width="300" height="300"></canvas>
+<script>
+    (async function () {
+        const player = new SVGA.Player("#svgaCanvas");
+        const parser = new SVGA.Parser();
+        try {
+            // ✅ استخدم رابط صحيح لتحميل SVGA
+            const videoItem = await parser.load("https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/angel.svga");
+            player.setVideoItem(videoItem);
+            player.startAnimation();
+        } catch (error) {
+            console.error("❌ Error loading SVGA:", error);
+            document.body.innerHTML = "<h3 style='color:red; text-align:center;'>⚠️ Failed to load SVGA animation</h3>";
+        }
+    })();
+</script>
+</body>
+</html>
