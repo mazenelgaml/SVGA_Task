@@ -1,177 +1,131 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:svgaplayer_flutter/parser.dart';
-import 'package:svgaplayer_flutter/player.dart';
 import 'package:svgaplayer_flutter/proto/svga.pb.dart';
-import 'package:audioplayers/audioplayers.dart';
-
+import 'package:svgaplayer_flutter/player.dart';
+import 'package:svgaplayer_flutter/audio_handler.dart';
 
 class SVGADisplayScreen extends StatefulWidget {
   final String svgaUrl;
-  SVGADisplayScreen({required this.svgaUrl});
+  const SVGADisplayScreen({super.key, required this.svgaUrl});
 
   @override
   _SVGADisplayScreenState createState() => _SVGADisplayScreenState();
 }
 
 class _SVGADisplayScreenState extends State<SVGADisplayScreen> with SingleTickerProviderStateMixin {
-
-  final AudioPlayer _audioPlayer = AudioPlayer();
   late SVGAAnimationController animationController;
   bool isLoading = true;
   bool isMuted = false;
   bool hasAudio = false;
-  bool isPlaying = true;
-
-
-
+  bool isPlaying = false;
+  final AudioHandler _audioHandler = AudioHandler();
 
   @override
-  void onInit() {
+  void initState() {
     super.initState();
     animationController = SVGAAnimationController(vsync: this);
-    loadAnimation(widget, mounted);
-
+    loadAnimation();
   }
 
-  Future<void> loadAnimation(dynamic widget, bool mounted) async {
-setState(() async{
-  try {
-    final videoItem = await loadVideoItem(widget.svgaUrl);
-    if (mounted) {
-      isLoading = false;
-      animationController.videoItem = videoItem;
-      hasAudio = videoItem.audios.isNotEmpty;
-      animationController.repeat();
-      isPlaying = true;
-
+  Future<void> loadAnimation() async {
+    try {
+      final videoItem = await loadVideoItem(widget.svgaUrl);
+      if (mounted) {
+        setState(() {
+          animationController.videoItem = videoItem;
+          hasAudio = videoItem.audios.isNotEmpty;
+          isLoading = false;
+        });
+        animationController.forward(from: 0.0);
+        isPlaying = true;
+        if (hasAudio) {
+          _audioHandler.playAudioFromSVGA(videoItem);
+        }
+      }
+    } catch (e) {
+      print("❌ Error loading SVGA: $e");
     }
-  } catch (e) {
-    print("Error loading SVGA: $e");
-  }
-});
   }
 
   void toggleMute() {
- setState(() {
-   isMuted = !isMuted;
-   for (var audio in animationController.audioLayers) {
-     audio.muteAudio(isMuted);
-   }
- });
-
+    setState(() {
+      isMuted = !isMuted;
+      _audioHandler.muteAudio(isMuted);
+    });
   }
 
   void togglePlayPause() {
-setState(() {
-  if (isPlaying) {
-    animationController.stop();
-  } else {
-    animationController.repeat();
-  }
-  isPlaying = !isPlaying;
-});
-
-  }
-
-  void play(String url) async {
-setState(() async{
-  try {
-    await _audioPlayer.play(UrlSource(url));
-  } catch (e) {
-    print("Error playing audio: $e");
-  }
-});
-  }
-
-  void stop() async {
-    try {
-      await _audioPlayer.stop();
-    } catch (e) {
-      print("Error stopping audio: $e");
-    }
-  }
-
-  @override
-  void onClose() {
-    _audioPlayer.dispose();
-    animationController.dispose();
-    super.dispose();
-  }
-
-
-
-  Future<MovieEntity> loadVideoItem(String image) async {
-    try {
-      if (image.startsWith("http")) {
-        return await SVGAParser.shared.decodeFromURL(image);
+    setState(() {
+      if (isPlaying) {
+        animationController.stop();
+        _audioHandler.pauseAudio();
       } else {
-        return await SVGAParser.shared.decodeFromAssets(image);
+        animationController.forward(from: 0.0);
+        if (hasAudio) {
+          _audioHandler.resumeAudio(); // Ensures audio resumes on play
+        }
+      }
+      isPlaying = !isPlaying;
+    });
+  }
+
+  Future<MovieEntity> loadVideoItem(String url) async {
+    try {
+      if (url.startsWith("http")) {
+        return await SVGAParser.shared.decodeFromURL(url);
+      } else {
+        return await SVGAParser.shared.decodeFromAssets(url);
       }
     } catch (e) {
-      print("Error loading SVGA file: $e");
+      print("❌ Error loading SVGA file: $e");
       rethrow;
     }
   }
 
+  @override
+  void dispose() {
+    _audioHandler.dispose();
+    animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-     return Scaffold(
-      appBar: AppBar(title: Text("SVGA Animation")),
+    return Scaffold(
+      appBar: AppBar(title: const Text("SVGA Animation")),
       body: Center(
         child: isLoading
-            ? CircularProgressIndicator()
-            : Center(
-              child: Stack(
-                alignment: Alignment.bottomRight,
-                children:[
+            ? const CircularProgressIndicator()
+            : Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Center(
+              child: SizedBox(
 
-                  Center(
-                    child: FittedBox(
-
-                      fit: BoxFit.fitWidth,
-                      child: SizedBox(
-                        width: Get.width,
-                        height: Get.height,
-                        child: SVGAImage(animationController),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 25),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        IconButton(
-                          icon: Container(
-                            width: 50,
-                              height: 50,
-                              decoration:BoxDecoration(
-                                color: Colors.grey.withOpacity(0.4),
-                                borderRadius: BorderRadius.circular(100)
-                              ) ,
-                              child: Center(child: Icon(isPlaying ? Icons.pause : Icons.play_arrow))),
-                          onPressed:togglePlayPause,
-                        ),
-                        if (hasAudio)
-                          IconButton(
-                            icon: Container(
-                                width: 50,
-                                height: 50,
-                                decoration:BoxDecoration(
-                                    color: Colors.grey.withOpacity(0.4),
-                                    borderRadius: BorderRadius.circular(100)
-                                ) ,
-                                child: Center(child: Icon(isMuted ? Icons.volume_off : Icons.volume_up))),
-                            onPressed: toggleMute,
-                          ),
-                      ],
-                    ),
-                  ),
-                ]
+                child: animationController.videoItem != null
+                    ? SVGAImage( controller: animationController,)
+                    : const SizedBox.shrink(),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.only(right: 25),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+                    onPressed: togglePlayPause,
+                  ),
+                  if (hasAudio)
+                    IconButton(
+                      icon: Icon(isMuted ? Icons.volume_off : Icons.volume_up),
+                      onPressed: toggleMute,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
